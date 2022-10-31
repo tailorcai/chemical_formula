@@ -29,12 +29,19 @@ class FenZi:
         self.suffix = m.group(3) or ''
         self.ends= m.group(4) or ''
         # print( m.groups() )
-        self.parts = list( map( lambda x: [x[0],x[1]] , p_fenzi_parts.findall( parts )))
+        # print( p_fenzi_parts.findall( parts ) )
+        self.parts = list( map( lambda x: [x[0],x[1]] , filter(lambda x: not x[0] in '↑↓' , p_fenzi_parts.findall( parts ))))
         
         # if self.suffix and len(self.suffix)==1 and self.parts[-1][1]: # 如果离子没有数字，而最后
         #     self.suffix = self.parts[-1][1] + self.suffix
         #     self.parts[-1][1] = ''
 
+    def to_species(self):
+        def r(x):
+            return x[0] + x[1]
+        suffix = self.suffix[::-1]
+        return ''.join( [ r(x) for x in self.parts] ) + suffix 
+    
     def __str__(self):
         if self.valid:
             return self.format()
@@ -61,10 +68,18 @@ class ReTestCase(unittest.TestCase):
 
     def testFenZi(self):
         i = ["H2O", "5Fe2+", "5Nh4Co23+","5Nh4Co3-", "5Nh4Co-", "H2O(hello)", "H2O（hello）", "Nh4(CO2)3(hello)"]
-        o = ["H_2O", "5Fe_2^+", "5Nh_4Co_2^{3+}", "5Nh_4Co_3^-", "5Nh_4Co^-", "H_2O(hello)", "H_2O（hello）","Nh_4(CO_2)_3(hello)" ]
+        o = ["H_2O", "5Fe_2^+", "5Nh_4Co_2^{3+}", "5Nh_4Co_3^-", "5Nh_4Co^-", "H_2O(hello)", "H_2O（hello）","Nh_4(CO_2)_3(hello)"]
         for x,y in zip(i,o):
             self.assertEqual( str(FenZi(x)),y )
 
+    def testFenZi2(self):
+        tbl = ['HCl↑','CO2↑' ]
+        out = ['HCl', 'CO2']
+        for x,y in zip(tbl, out):
+            fz = FenZi(x)
+            print( fz.parts )
+            print( fz.suffix )
+            self.assertEqual( fz.to_species(), y)
     # lines = (
     # #     '1、氮气和氢气 N2+3H2=2NH3(高温高压催化剂)',
     # # "11、澄清石灰水通入少量CO2: Ca2++2OH-+CO3=CaCO3↓+H2O",
