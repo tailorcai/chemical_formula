@@ -1,35 +1,42 @@
-from turtle import onclick
+from dataclasses import dataclass
+from typing import Any, List
 import flet
 from flet import Page, Stack, Row, Column,UserControl,Container,Text,Divider, View, ListView,ElevatedButton,ListTile,Icon
 from flet import alignment,colors, border_radius, ContainerTapEvent,icons
 from graph import ChemQuery
+from chempy import Substance, Reaction
 
-    
+@dataclass    
 class ElementModel:
-    def __init__(self):
-        self.element = None
-        self.substances = None
+    element : Any
+    substances: List[Substance]
 
+@dataclass
 class SubstanceModel:
-    def __init__(self):
-        self.substance = None
-        self.reactions = []
+    substance : Substance
+    reactions : List[Reaction]
 
 class Controller:
-    def __init__(self):
+    instance = None
+
+    def __init__(self, page):
         self.query = ChemQuery()
         self.views = []
-        self.root_view = None
-        self.data = None
-        self._active_view = None
+        self.page = page
+        # self.data = None
+        self._active_view = 0
         self.history = []
 
     @property
     def active_view(self):
+        return self.views[self._active_view]
+
+    @property
+    def active_view_id(self):
         return self._active_view
     
-    @active_view.setter
-    def active_view(self,newVal):
+    @active_view_id.setter
+    def active_view_id(self,newVal):
         
         view = self.views[self._active_view] 
         view.visible = False
@@ -41,35 +48,57 @@ class Controller:
         self._active_view = newVal
 
     def history_push(self):
-        self.history.append( (self._active_view, self.data ))
+        self.history.append( (self._active_view, self.active_view.data ))
 
     def history_pop(self):
         if self.history:
-            v, self.data = self.history[-1]
+            v, data = self.history[-1]
             self.history = self.history[::-1]  # pop
-            self.active_view = v
+            self.active_view_id = v
+            self.views[v].data = data
             # self.views[self._active_view].update()
-            self.root_view.update()
+            self.page.update()
 
     def show_element(self, data):
         self.history_push()
         detail = self.query.element_detail(data['id'])
-        self.data = ElementModel()
-        self.data.element = detail['element']
-        self.data.substances = detail['substances']
-        self.active_view = 1
-        self.root_view.update()
+        data = ElementModel(**detail)
+
+        self.views[1].data = data
+        self.active_view_id = 1
+        self.page.update()
 
     def show_substance(self,subst):
         self.history_push()
-        self.data = SubstanceModel()
-        self.data.substance = subst
-        self.data.reactions = self.query.reactions_of_subst(subst.name)
+        data = SubstanceModel(substance=subst, reactions=self.query.reactions_of_subst(subst.name))
+
         # print( self.data.reactions )
-        self.active_view = 2
-        self.root_view.update()
+        self.views[2].data = data
+        self.active_view_id = 2
+        self.page.update()
+
+    @staticmethod
+    def main(page: Page):
+
+        page.title = "GridView Example"
+        # page.theme_mode = "dark"
+        page.padding = 50
+        # page.horizontal_alignment = "stretch"
+        # page.vertical_alignment = "stretch"
+        page.update()
         
-_controller = Controller()
+        instance = Controller(page)
+        Controller.instance = instance
+        instance.views = [
+            ElementChartApp(),
+            ElementView(),
+            SubstanceView(),
+        ]
+
+        page.add( Stack(instance.views,expand=True ), 
+            Row([Container(Text("Footer"), bgcolor="yellow", padding=5, expand=True)]))
+        page.update()        
+
 
 class ElementChartApp(UserControl):
     def gen_element_table(self):
@@ -94,8 +123,7 @@ class ElementChartApp(UserControl):
         self.table = self.gen_element_table()
 
         def element_click(e: ContainerTapEvent):
-            _controller.show_element( e.control.data )
-            _controller.active_view = 1
+            Controller.instance.show_element( e.control.data )
 
         def rows():
             items = []
@@ -123,7 +151,7 @@ class ElementView(UserControl):
         self.title = Text("Size 10", size=50)
         self.lv_subst = ListView(spacing=10,expand=True)
         def on_back_click(e):
-            _controller.history_pop()
+            Controller.instance.history_pop()
 
 
         return Column([
@@ -135,12 +163,11 @@ class ElementView(UserControl):
 
     def update(self):
         def on_subst_click(e):
-            _controller.show_substance( e.control.data )
-        # print( _controller.data.element )
-        if type(_controller.data) is ElementModel:
-            self.title.value = _controller.data.element['name']
+            Controller.instance.show_substance( e.control.data )
+        if type(self.data) is ElementModel:
+            self.title.value = self.data.element['name']
             controls = []
-            for subst in _controller.data.substances:
+            for subst in self.data.substances:
                 controls.append( Container(
                         content=Text( value=subst.unicode_name,  ),
                         on_click=on_subst_click,
@@ -152,21 +179,22 @@ class SubstanceView(UserControl):
     def build(self):
         self.visible = False
         self.title = Text("Size 10", size=50)
-        self.reactions = ListView(expand=True, spacing=10)
+        self.reactions_l = ListView(expand=True, spacing=10)
+        self.reactions_r = ListView(expand=True, spacing=10)
         def on_back_click(e):
-            _controller.history_pop()
+            Controller.instance.history_pop()
         return Column([
             Row( [ElevatedButton(text="Back", on_click=on_back_click),
                 self.title]),
             Divider(height=9, thickness=3),
-            self.reactions
+            Row( [self.reactions_l, self.reactions_r]),
         ])
 
     def update(self):
-        if type(_controller.data) is SubstanceModel:
-            self.title.value = _controller.data.substance.unicode_name
-            self.reactions.controls.clear()
-            for reac in _controller.data.reactions['left']:
+        if type(self.data) is SubstanceModel:
+            self.title.value = self.data.substance.unicode_name
+            self.reactions_l.controls.clear()
+            for reac in self.data.reactions['left']:
                 title = reac.data['unicode']
                 content = ListTile(
                             leading=Icon(icons.ALBUM),
@@ -175,26 +203,21 @@ class SubstanceView(UserControl):
                                title
                             ),
                         )
-                self.reactions.controls.append(content)
+                self.reactions_l.controls.append(content)
+            self.reactions_r.controls.clear()
+            for reac in self.data.reactions['right']:
+                title = reac.data['unicode']
+                content = ListTile(
+                            leading=Icon(icons.ALBUM),
+                            title=Text(reac.name),
+                            subtitle=Text(
+                               title
+                            ),
+                        )
+                self.reactions_r.controls.append(content)
+
         super().update()
 
-def main(page: Page):
-    page.title = "GridView Example"
-    # page.theme_mode = "dark"
-    page.padding = 50
-    # page.horizontal_alignment = "stretch"
-    # page.vertical_alignment = "stretch"
-    page.update()
-    
-    _controller.views = [
-        ElementChartApp(),
-        ElementView(),
-        SubstanceView(),
-    ]
-    _controller._active_view = 0
-    _controller.root_view = page
-    page.add( Stack(_controller.views,expand=True ), 
-        Row([Container(Text("Footer"), bgcolor="yellow", padding=5, expand=True)]))
-    page.update()
 
-flet.app(target=main)
+
+flet.app(target=Controller.main)
