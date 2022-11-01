@@ -26,6 +26,7 @@ class Controller:
         # self.data = None
         self._active_view = 0
         self.history = []
+        Controller.instance = self
 
     @property
     def active_view(self):
@@ -88,7 +89,7 @@ class Controller:
         page.update()
         
         instance = Controller(page)
-        Controller.instance = instance
+        
         instance.views = [
             ElementChartApp(),
             ElementView(),
@@ -109,7 +110,7 @@ class ElementChartApp(UserControl):
                     if _idx % 2:
                         items.append((0,'-'))
                     else:
-                        items.append((idx, _controller.query.element_detail(idx)['element']))
+                        items.append((idx, Controller.instance.query.element_detail(idx)['element']))
                         idx += 1
             return idx, items
         element_table = []
